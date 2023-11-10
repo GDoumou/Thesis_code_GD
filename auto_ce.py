@@ -24,10 +24,7 @@ from skimage.measure import label
 
 # cur_dir = '/data/tu_gdoumou/IQT_data/leave_one_out'
 # os.chdir(cur_dir)
-
 # files = os.listdir(cur_dir)
-
-
 
 # ------------------------------- Synth MPRAGE -----------------------------------------
 cur_dir = '/data/Georgia_data/nifti_MPM_anonym/to_sm_ce/now_2'
@@ -39,7 +36,8 @@ files = os.listdir(cur_dir)
 for f in files:
     file_dir = os.path.join(cur_dir,f)
     os.chdir(file_dir)
-
+    
+    ## Load R1 map, GMC and CSF masks and DIR image
     img = nib.load('R1_masked_procin.nii')
     # img = nib.load('R1_masked_procin.nii')
     img01 = img.get_fdata()
@@ -83,7 +81,8 @@ for f in files:
     DIR_final = DIR_final.get_fdata()
 
      
-
+    ## Create a kernel calculating the distance of the cenral voxel to every other pixel in the kernel 
+    
     len_x = 10
     len_y = 10
     len_z = 10
@@ -97,6 +96,9 @@ for f in files:
     sd_map = np.zeros(img_shape)
     d_list = []
 
+
+    
+    ## Go through every voxel in the GMC mask (binary) applying ther distance kernel, finding the shortest distance. Create a list sorting the distances from highest to smallest value. 
 
     for z in range(15,img_shape[2]-10):
         for x in range(15,img_shape[0]-10):
@@ -118,6 +120,11 @@ for f in files:
     ce_map = np.zeros(img_shape)
     sorted_d_list = sorted(d_list,reverse = True)
     sorted_d_list_len = len(sorted_d_list)
+
+    ## To create the CE map:
+    ## Go iteratively from the highest to the lowest distance value through the sorted distance list and locate the voxel (x,y,z) with that value.
+    ## assign the voxel value and its local voxels in distance of its value twice the value of the distance. 
+
 
     for d in range(sorted_d_list_len):
         x = sorted_d_list[d][1]
@@ -148,12 +155,14 @@ for f in files:
     ni_img = nib.Nifti1Image(ce_map, img.affine, img.header)
     nib.save(ni_img,'ce_map.nii')
 
+    
     def avg_func(values):
          return values.mean()                    
             
-
     kernel = np.array([[[1,1,1],[1,1,1],[1,1,1]],[[1,1,1],[1,1,1],[1,1,1]],[[1,1,1],[1,1,1],[1,1,1]]])
     kernel_5 = np.ones([5,5,5])
+
+    ## apply 5x5x5 smoothing kernels to every voxel in CE map
 
     ce_map_conv = ndimage.generic_filter(ce_map, avg_func, footprint=kernel_5)
 
@@ -185,8 +194,7 @@ for f in files:
 
     kernel_9 = np.ones([9,9,9])
 
-
-    # kernel_9[4,4] = 0
+    ## apply 9x9x9 kernels calculating the mean and std for every voxel in the smoothed CE map
 
     ce_map_avP = ndimage.generic_filter(ce_map_conv, avg_func, footprint=kernel_9)
 
@@ -207,12 +215,18 @@ for f in files:
     # ce_map_stdP = ce_map_stdP[150:300,350:450,150:300]
 
     # median_avP = np.median(ce_map_avP)  
-    # median_avP = np.median(ce_map_avP[gmc_updated > 0]) 
+    # median_avP = np.median(ce_map_avP[gmc_updated > 0])
+
+    ## calculate the median of the mean and std 
+    
     median_avP = np.median(ce_map_avP[img01 > 0]) 
 
     # median_stdP = np.median(ce_map_stdP)
     # median_stdP = np.median(ce_map_stdP[gmc_updated > 0])
-    median_stdP = np.median(ce_map_stdP[img01 > 0]) 
+    median_stdP = np.median(ce_map_stdP[img01 > 0])
+
+
+    ## Enhance the smoothed CE map and map on the DIR image.
 
     SL = 3
     Pmin = median_avP + SL*median_stdP
